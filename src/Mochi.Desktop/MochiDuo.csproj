@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms><Nullable>enable</Nullable><ImplicitUsings>disable</ImplicitUsings><AssemblyName>MochiDuo</AssemblyName><ApplicationIcon>../../assets/icon/MochiDuo.ico</ApplicationIcon><ApplicationManifest>app.manifest</ApplicationManifest><NoWarn>$(NoWarn);WFO0003</NoWarn></PropertyGroup>
+ <ItemGroup>
+  <Content Include="../../assets/mochi/*.png" Link="mochi/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  <Content Include="../../assets/azki/*.png" Link="azki/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  <Content Include="../../assets/icon/MochiDuo.ico" Link="MochiDuo.ico" CopyToOutputDirectory="PreserveNewest" />
+ </ItemGroup>
+</Project>
