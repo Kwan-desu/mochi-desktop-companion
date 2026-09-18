@@ -4,6 +4,8 @@ A Windows anime desktop companion with transparent, draggable characters, Gemini
 
 ## Start
 
+Prebuilt portable and installer executables are available on the [private Releases page](https://github.com/Kwan-desu/mochi-desktop-companion/releases). Both bundle .NET and the artwork.
+
 On Windows, install the .NET 10 SDK to build, then double-click **Build.cmd**. Open **Launch Desktop Companion.cmd** to start. After building, only the .NET 10 Desktop Runtime is required. Keep the files in `app/` together.
 
 Enter API keys in **Settings → Save settings**. Choose solo or two-character mode. Use **Companions → Create companion** to add artwork, a personality, and an optional Fish voice ID. See [the user guide](docs/USER-GUIDE.md).
@@ -25,6 +27,7 @@ Enter API keys in **Settings → Save settings**. Choose solo or two-character m
 | `assets/` | Character images, original reference artwork, and app icon |
 | `docs/` | User guide and artwork provenance |
 | `tools/IconMaker/` | Rebuildable Windows icon utility |
+| `packaging/` | Release build script, Inno Setup definition, and release notes |
 | `app/` | Local compiled app; generated and excluded from Git |
 
 ## Build and test

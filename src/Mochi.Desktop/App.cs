@@ -29,7 +29,7 @@ public static class Program
     [STAThread] public static void Main(string[] args)
     {
         if (Array.Exists(args, a => a == "--test" || a == "--live-test")) { Tests.Run(Array.Exists(args, a => a == "--live-test")).GetAwaiter().GetResult(); return; }
-        var scope = Native.Scope(); using var signal = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\MochiCompanion-v1-open-" + scope); using var mutex = new Mutex(true, "Local\\MochiCompanion-v1-" + scope, out var first);
+        var scope = Native.Scope() + (Array.Exists(args, a => a == "--smoke-test") ? "-smoke-" + Environment.ProcessId : ""); using var signal = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\MochiCompanion-v1-open-" + scope); using var mutex = new Mutex(true, "Local\\MochiCompanion-v1-" + scope, out var first);
         if (!first) { signal.Set(); return; }
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
         app.DispatcherUnhandledException += (_, e) => { MessageBox.Show(e.Exception.Message, "Mochi"); e.Handled = true; };
