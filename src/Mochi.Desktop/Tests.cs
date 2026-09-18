@@ -51,6 +51,11 @@ public static class Tests
                 var persona = AiClient.Persona(new Settings { CharacterName = "Yuki", Personality = custom.Personality, ReplyLength = "Long", Mode = "One character" });
                 Check(persona.Contains("Yuki") && persona.Contains("astronomy") && persona.Contains("4-6"), "custom personality and reply length reach prompt");
             } finally { if (Directory.Exists(libraryPath)) Directory.Delete(libraryPath, true); }
+            var workArea = new System.Windows.Rect(-100, 0, 1000, 800);
+            Check(TaskbarMotion.ClampX(-500,190,workArea) == -100 && TaskbarMotion.ClampX(1500,190,workArea) == 710, "taskbar motion stays inside work area");
+            Check(TaskbarMotion.Step(100,102,1) == 102 && TaskbarMotion.Step(100,50,.1) < 100, "walking reaches target without overshoot");
+            var behavior = JsonSerializer.Deserialize<Settings>(JsonSerializer.Serialize(new Settings { Wander = false, IdleTalk = true, OnTop = true }));
+            Check(behavior is { Wander: false, IdleTalk: true, OnTop: true }, "desktop behavior settings survive serialization");
             Check(Settings.Folder.EndsWith("MochiDuo"), "settings isolated");
             Check(Dialogue.Sprite(true, "angry") == "angry" && Dialogue.Sprite(true, "sad") == "normal", "AZKi expressions");
             Check(Dialogue.Sprite(false, "angry") == "puffyface", "Mochi expression fallback");

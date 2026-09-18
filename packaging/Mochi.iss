@@ -1,4 +1,6 @@
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+#define AppVersion "1.1.0"
+#endif
 [Setup]
 AppId={{271467E2-D833-4AC7-A174-16DF879A728A}
 AppName=Mochi Desktop Companion
@@ -12,7 +14,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir=..\artifacts\release
-OutputBaseFilename=Mochi-Desktop-Companion-1.0.0-win-x64-Setup
+OutputBaseFilename=Mochi-Desktop-Companion-{#AppVersion}-win-x64-Setup
 SetupIconFile=..\assets\icon\MochiDuo.ico
 UninstallDisplayIcon={app}\MochiDuo.exe
 Compression=lzma2

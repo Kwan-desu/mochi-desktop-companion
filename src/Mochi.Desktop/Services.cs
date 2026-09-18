@@ -32,7 +32,9 @@ public sealed class Settings
     public bool Speak { get; set; } = true;
     public string OutputLanguage { get; set; } = "Auto (match input)";
     public string VoiceStyle { get; set; } = "Auto (match emotion)";
-    public bool OnTop { get; set; }
+    public bool OnTop { get; set; } = true;
+    public bool Wander { get; set; } = true;
+    public bool IdleTalk { get; set; }
     public double Height { get; set; } = 510;
     public double Left { get; set; } = -1;
     public double Top { get; set; } = -1;

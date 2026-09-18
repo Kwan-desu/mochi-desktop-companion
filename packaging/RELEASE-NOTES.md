@@ -1,4 +1,11 @@
-# Mochi Desktop Companion 1.0.0
+# Mochi Desktop Companion 1.1.0
+
+## New in this version
+
+- Optional taskbar wandering, bouncing, and rest animations using your companion artwork.
+- Always-on-top setting and right-click pause/resume walking.
+- Opt-in AI chatter every few minutes while minimized (uses your API quota).
+- Settings shows whether API keys were loaded; keys remain encrypted locally.
 
 ## Downloads
 

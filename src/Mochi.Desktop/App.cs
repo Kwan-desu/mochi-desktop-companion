@@ -29,7 +29,7 @@ public static class Program
     [STAThread] public static void Main(string[] args)
     {
         if (Array.Exists(args, a => a == "--test" || a == "--live-test")) { Tests.Run(Array.Exists(args, a => a == "--live-test")).GetAwaiter().GetResult(); return; }
-        var scope = Native.Scope() + (Array.Exists(args, a => a == "--smoke-test") ? "-smoke-" + Environment.ProcessId : ""); using var signal = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\MochiCompanion-v1-open-" + scope); using var mutex = new Mutex(true, "Local\\MochiCompanion-v1-" + scope, out var first);
+        var scope = Native.Scope() + (Array.Exists(args, a => a == "--smoke-test") ? "-smoke-" + Environment.ProcessId : ""); using var signal = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\MochiCompanion-v11-open-" + scope); using var mutex = new Mutex(true, "Local\\MochiCompanion-v11-" + scope, out var first);
         if (!first) { signal.Set(); return; }
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
         app.DispatcherUnhandledException += (_, e) => { MessageBox.Show(e.Exception.Message, "Mochi"); e.Handled = true; };
@@ -60,7 +60,7 @@ public static class Dialogue
     public static int TurnCount(string option) => option.StartsWith("Shorter") ? 4 : option.StartsWith("Longer") ? 12 : option.StartsWith("Extended") ? 20 : 6;
     public static string Sprite(bool azki, string emotion) => azki ? emotion switch { "puffyface" => "puffyface", "angry" => "angry", _ => "normal" } : emotion == "angry" ? "puffyface" : emotion;
 }
-public sealed class Actor : Window
+public sealed partial class Actor : Window
 {
     readonly Image image = new() { Stretch = Stretch.Uniform, Cursor = Cursors.Hand }; readonly TextBlock text = Ui.Text(""); readonly Dictionary<string, BitmapSource> sprites = new();
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -69,12 +69,12 @@ public sealed class Actor : Window
         Width = 310; Height = 520; WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent; ShowInTaskbar = false; ShowActivated = false; ResizeMode = ResizeMode.NoResize;
         var grid = new Grid(); grid.RowDefinitions.Add(new() { Height = new GridLength(100) }); grid.RowDefinitions.Add(new());
         var bubble = new Border { Background = Brushes.White, CornerRadius = new CornerRadius(16), Padding = new Thickness(12), Margin = new Thickness(4), Child = text }; grid.Children.Add(bubble); Grid.SetRow(image,1); grid.Children.Add(image); Content = grid;
-        image.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) show(); else DragMove(); }; bubble.MouseLeftButtonDown += (_, _) => show();
-        timer.Tick += (_, _) => { if (IsVisible && !Topmost && !IsMouseOver) Native.SetWindowPos(new WindowInteropHelper(this).Handle, new IntPtr(1),0,0,0,0,0x13); }; timer.Start(); Closed += (_, _) => timer.Stop();
+        image.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) show(); else { dragging = true; try { DragMove(); } finally { dragging = false; Rest(); } } }; bubble.MouseLeftButtonDown += (_, _) => show();
+        timer.Tick += (_, _) => { if (IsVisible && !Topmost && !IsMouseOver) Native.SetWindowPos(new WindowInteropHelper(this).Handle, new IntPtr(1),0,0,0,0,0x13); }; timer.Start(); InitializeActivities(); Closed += (_, _) => { timer.Stop(); activityTimer.Stop(); };
     }
     public void Load(CompanionProfile profile) { sprites.Clear(); foreach (var pair in profile.Images) sprites[pair.Key] = CompanionLibrary.LoadImage(pair.Value); Title = profile.Name; Set("happy", profile.Name + " · double-click to chat", false); }
     public void Set(string emotion, string line, bool speaking) { image.Source = sprites.TryGetValue(emotion,out var sprite) ? sprite : sprites["happy"]; text.Text = line.Length > 150 ? line[..147] + "…" : line; Animate(speaking); }
-    public void Animate(bool active) { var transform = new TranslateTransform(); image.RenderTransform = transform; if (active) transform.BeginAnimation(TranslateTransform.YProperty,new DoubleAnimation(0,-4,TimeSpan.FromSeconds(.3)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever }); }
+    public void Animate(bool active) { speaking = active; Rest(); var transform = new TranslateTransform(); image.RenderTransform = transform; if (active) transform.BeginAnimation(TranslateTransform.YProperty,new DoubleAnimation(0,-4,TimeSpan.FromSeconds(.3)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever }); }
 }
 public sealed partial class Studio : Window
 {
@@ -100,11 +100,11 @@ public sealed partial class Studio : Window
         var history = new DockPanel(); var tools = new StackPanel(); tools.Children.Add(Ui.Text("Chat history",23)); tools.Children.Add(Ui.Text("Last 500 messages · encrypted on this PC",12)); tools.Children.Add(Ui.Button("Clear history", () => { if (run != null) return; if (MessageBox.Show(this,"Delete all saved chat history?","Clear history",MessageBoxButton.YesNo) == MessageBoxResult.Yes) try { archive.Clear(); ai.Clear(); messages.Children.Clear(); RefreshHistory(); } catch(Exception e) { status.Text = e.Message; } })); DockPanel.SetDock(tools,Dock.Top); history.Children.Add(tools); history.Children.Add(historyView); tabs.Items.Add(new TabItem { Content = history }); tabs.SelectedIndex = 0;
         ai.Notice += notice => status.Text = notice; LoadCompanions(); ApplyMode(); RefreshHistory();
         if (Settings.LoadWarning.Length > 0 || archive.Warning.Length > 0) status.Text = Settings.LoadWarning + " " + archive.Warning;
-        Loaded += (_, _) => { PlaceActors(); BringBack(); }; Closing += (_, _) => { closing = true; run?.Cancel(); StopAudio(); mochi.Close(); azki.Close(); ai.Dispose(); };
+        InitializeIdleTalk(); Loaded += (_, _) => { ApplyActivities(); PlaceActors(); BringBack(); }; Closing += (_, _) => { closing = true; idleTimer.Stop(); run?.Cancel(); StopAudio(); mochi.Close(); azki.Close(); ai.Dispose(); };
     }
     public void BringBack() { Show(); WindowState = WindowState.Normal; Topmost = true; Activate(); Native.SetForegroundWindow(new WindowInteropHelper(this).Handle); Dispatcher.BeginInvoke(new Action(() => Topmost = false)); }
     public void ShowSettings() => tabs.SelectedIndex = 1;
-    void PlaceActors() { mochi.Show(); if (config.Mode == "Two characters") azki.Show(); else azki.Hide(); var area = SystemParameters.WorkArea; mochi.Left = area.Right - (config.Mode == "Two characters" ? 640 : 320); azki.Left = area.Right - 320; mochi.Top = azki.Top = Math.Max(area.Top,area.Bottom - 520); }
+    void PlaceActors() { mochi.Show(); if (config.Mode == "Two characters") azki.Show(); else azki.Hide(); var area = SystemParameters.WorkArea; mochi.Left = area.Right - (config.Mode == "Two characters" ? 640 : 320); azki.Left = area.Right - 320; mochi.Top = azki.Top = Math.Max(area.Top,area.Bottom - mochi.Height); }
     void ApplyMode() { start.Content = config.Mode == "Two characters" ? "Start conversation →" : "Send message →"; inputLabel.Text = config.Mode == "Two characters" ? "Give your companions a topic" : "Message " + Primary.Name; turns.IsEnabled = config.Mode == "Two characters"; if (IsLoaded) PlaceActors(); }
     void RefreshHistory() { historyView.Text = string.Join("\n\n",archive.Lines.ConvertAll(line => $"{line.At:g} · {line.Speaker}\n{line.Text}")); historyView.ScrollToEnd(); }
     void Remember(string speaker,string text) { try { archive.Add(speaker,text); RefreshHistory(); } catch(Exception e) { status.Text = "History could not be saved: " + e.Message; } }
@@ -112,19 +112,24 @@ public sealed partial class Studio : Window
     {
         var dock = new DockPanel(); var footer = new StackPanel(); DockPanel.SetDock(footer,Dock.Bottom); dock.Children.Add(footer); var body = new StackPanel { Margin = new Thickness(8) };
         body.Children.Add(Ui.Text("Settings",24)); body.Children.Add(Ui.Text("Connections, voices, and your desktop",13));
+        body.Children.Add(Ui.Text("Loaded keys · Google: " + (config.GoogleKey.Length > 0 ? "available" : "not saved") + " · Fish: " + (config.FishKey.Length > 0 ? "available" : "not saved") + ". Changes below need Save settings.",12));
         var mode = new ComboBox { ItemsSource = new[] { "One character", "Two characters" }, SelectedItem = config.Mode == "Two characters" ? "Two characters" : "One character" }; body.Children.Add(Ui.Text("Companion mode")); body.Children.Add(mode);
         PasswordBox Key(string label,string value) { body.Children.Add(Ui.Text(label)); var box = new PasswordBox { Password = value, Padding = new Thickness(10) }; body.Children.Add(box); return box; }
         var google = Key("Google AI Studio API key",config.GoogleKey); body.Children.Add(Ui.Text("Gemini model")); var model = new TextBox { Text = config.GoogleModel }; body.Children.Add(model); var fish = Key("Fish Audio API key",config.FishKey);
         body.Children.Add(Ui.Text("Fish model")); var fishModel = new ComboBox { ItemsSource = new[] { "s2.1-pro-free", "s2-pro" }, SelectedItem = config.FishModel }; body.Children.Add(fishModel);
         var fallback = new CheckBox { Content = "Enable fallback API keys", IsChecked = config.EnableFallback, Margin = new Thickness(0,12,0,8) }; body.Children.Add(fallback); var googleBackup = Key("Fallback Google key",config.GoogleFallbackKey); var fishBackup = Key("Fallback Fish key",config.FishFallbackKey);
         body.Children.Add(Ui.Text("Retries once for rejected credentials, rate limits, or server errors. Provider quotas and pricing still apply. Keys are encrypted on this PC.",12));
-        var top = new CheckBox { Content = "Keep companions above other windows", IsChecked = config.OnTop, Margin = new Thickness(0,12,0,12) }; body.Children.Add(top); body.Children.Add(Ui.Text("Voice IDs and personalities live in Companions. Language and speech controls are on the chat page.",12));
+        var top = new CheckBox { Content = "Always on top · keep companions visible above other apps", IsChecked = config.OnTop, Margin = new Thickness(0,12,0,12) }; body.Children.Add(top); body.Children.Add(Ui.Text("Voice IDs and personalities live in Companions. Language and speech controls are on the chat page.",12));
+        var wander = new CheckBox { Content = "Taskbar life · wander, bounce, and rest above the taskbar", IsChecked = config.Wander, Margin = new Thickness(0,8,0,8) }; body.Children.Add(wander);
+        var idleTalk = new CheckBox { Content = "Occasional AI chatter while the dashboard is minimized", IsChecked = config.IdleTalk, Margin = new Thickness(0,8,0,8) }; body.Children.Add(idleTalk);
+        body.Children.Add(Ui.Text("Taskbar life uses small animated versions of your artwork. AI chatter runs about every 3 minutes, uses Gemini/Fish quota, and pauses during conversations. Turn it off for quiet company.",12));
+        body.Children.Add(Ui.Text("API keys are saved encrypted for your Windows account, never bundled with the app or uploaded to GitHub.",12));
         var result = Ui.Text("",12); footer.Children.Add(result); footer.Children.Add(Ui.Button("Save settings", () => {
             if (run != null) { result.Text = "Stop chatting before saving settings."; return; }
             if (!System.Text.RegularExpressions.Regex.IsMatch(model.Text.Trim(),@"^[a-zA-Z0-9.\-]+$")) { result.Text = "Enter a valid Gemini model name."; return; }
-            config.GoogleKey = google.Password.Trim(); config.FishKey = fish.Password.Trim(); config.GoogleModel = model.Text.Trim(); config.FishModel = (string)fishModel.SelectedItem; config.EnableFallback = fallback.IsChecked == true; config.GoogleFallbackKey = googleBackup.Password.Trim(); config.FishFallbackKey = fishBackup.Password.Trim(); config.OnTop = top.IsChecked == true;
+            config.GoogleKey = google.Password.Trim(); config.FishKey = fish.Password.Trim(); config.GoogleModel = model.Text.Trim(); config.FishModel = (string)fishModel.SelectedItem; config.EnableFallback = fallback.IsChecked == true; config.GoogleFallbackKey = googleBackup.Password.Trim(); config.FishFallbackKey = fishBackup.Password.Trim(); config.OnTop = top.IsChecked == true; config.Wander = wander.IsChecked == true; config.IdleTalk = idleTalk.IsChecked == true;
             if (config.Mode != (string)mode.SelectedItem) ai.Clear(); config.Mode = (string)mode.SelectedItem; config.OutputLanguage = (string)language.SelectedItem; config.Speak = speech.IsChecked == true;
-            try { config.Save(); mochi.Topmost = azki.Topmost = config.OnTop; ApplyMode(); result.Text = "Settings saved ✓"; } catch(Exception e) { result.Text = e.Message; }
+            try { config.Save(); ApplyActivities(); ApplyMode(); result.Text = "Settings saved ✓"; } catch(Exception e) { result.Text = e.Message; }
         })); dock.Children.Add(new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }); return dock;
     }
     Settings Snapshot(int turn) => new() { CharacterName = Profile(turn).Name, Personality = Profile(turn).Personality, ReplyLength = config.ReplyLength, Mode = config.Mode, GoogleKey = config.GoogleKey, FishKey = config.FishKey, GoogleFallbackKey = config.GoogleFallbackKey, FishFallbackKey = config.FishFallbackKey, EnableFallback = config.EnableFallback, GoogleModel = config.GoogleModel, FishModel = config.FishModel, Voice = Profile(turn).Voice, Speak = config.Speak, OutputLanguage = config.OutputLanguage };
@@ -146,16 +151,16 @@ public sealed partial class Studio : Window
         try { if (prepared.Audio != null) await Play(prepared.Audio, () => Reveal(prepared),ct); else { Reveal(prepared); await Task.Delay(1800,ct); } }
         finally { (prepared.Turn % 2 == 0 ? mochi : azki).Animate(false); }
     }
-    async Task Start()
+    async Task Start(bool idle = false)
     {
         if (run != null) return; var subject = topic.Text.Trim(); if (subject.Length == 0) { status.Text = "Type a message or topic first."; return; }
         if (config.GoogleKey.Length == 0 || (speech.IsChecked == true && config.FishKey.Length == 0)) { status.Text = "Add your API keys in Settings first."; ShowSettings(); return; }
         if (speech.IsChecked == true && (Primary.Voice.Length == 0 || (config.Mode == "Two characters" && Secondary.Voice.Length == 0))) { status.Text = "Add a voice ID in Companions or switch off Speak replies."; return; }
         using var cts = new CancellationTokenSource(); run = cts; start.IsEnabled = topic.IsEnabled = language.IsEnabled = speech.IsEnabled = turns.IsEnabled = false; Task<Prepared>? pending = null;
         try {
-            config.OutputLanguage = (string)language.SelectedItem; config.Speak = speech.IsChecked == true; config.Save(); bool solo = config.Mode != "Two characters";
+            config.OutputLanguage = (string)language.SelectedItem; config.Speak = speech.IsChecked == true; config.Save(); bool solo = idle || config.Mode != "Two characters";
             Remember(solo ? "You" : "Topic",subject); messages.Children.Add(Ui.Text((solo ? "You  ·  " : "Topic  ·  ") + subject,15)); transcript.ScrollToEnd(); if (solo) topic.Clear(); status.Text = Primary.Name + " is thinking and preparing a reply…";
-            if (solo) { var settings = Snapshot(0); var reply = await ai.Chat(settings,subject,null,cts.Token); var audio = settings.Speak ? await ai.Speech(settings,reply,cts.Token) : null; await Present(new(reply,audio,0),cts.Token); }
+            if (solo) { var settings = Snapshot(0); if (idle) settings.Mode = "One character"; var reply = await ai.Chat(settings,subject,null,cts.Token); var audio = settings.Speak ? await ai.Speech(settings,reply,cts.Token) : null; await Present(new(reply,audio,0),cts.Token); }
             else {
                 string choice = (string)turns.SelectedItem; int total = Dialogue.IsUltimate(choice) ? -1 : Dialogue.TurnCount(choice); var history = new List<string>(); var current = await Prepare(subject,history,0,total,cts.Token);
                 for (int turn = 0; total < 0 || turn < total; turn++) {
